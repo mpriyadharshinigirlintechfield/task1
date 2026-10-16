@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daily Expenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  body{font-family:'Manrope',system-ui,sans-serif;background:#070b14;min-height:100vh}
+  body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(110px);opacity:.45}
+  body::before{width:520px;height:520px;background:#0f766e;top:-140px;left:-120px}
+  body::after{width:480px;height:480px;background:#4338ca;bottom:-160px;right:-100px}
+  .glass{background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-radius:1.25rem}
+  .field{width:100%;background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:.75rem;padding:.65rem .8rem;color:#e2e8f0;outline:none;transition:border-color .15s}
+  .field:focus{border-color:#2dd4bf}
+  .field option{background:#0f172a}
+  input[type=date]{color-scheme:dark}
+  .chip{padding:.2rem .65rem;border-radius:999px;border:1px solid rgba(255,255,255,.15);font-size:.75rem;font-weight:600;cursor:pointer;user-select:none}
+  .chip:has(input:checked){background:#14b8a6;border-color:#14b8a6;color:#04201d}
+  ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.18);border-radius:6px}
+</style>
+</head>
+<body class="text-slate-200 antialiased">
+<main class="max-w-7xl mx-auto p-4 lg:p-8 grid lg:grid-cols-[minmax(0,1fr)_400px] gap-6">
+
+  <!-- LEFT: stats + charts -->
+  <section class="space-y-6 min-w-0">
+    <header class="glass p-5 flex flex-wrap items-center justify-between gap-4">
+      <h1 class="text-2xl font-extrabold tracking-tight">Daily Expenses</h1>
+      <div class="flex gap-3">
+        <select id="selMonth" class="field !w-auto" aria-label="Month"></select>
+        <select id="selYear" class="field !w-auto" aria-label="Year"></select>
+      </div>
+    </header>
+
+    <div class="grid sm:grid-cols-3 gap-4">
+      <div class="glass p-5">
+        <p class="text-sm text-slate-400">Net balance</p>
+        <p id="net" class="text-3xl font-extrabold mt-2">RM 0.00</p>
+        <p class="text-xs text-slate-400 mt-2"><span id="inc" class="text-emerald-400"></span> in &middot; <span id="exp" class="text-rose-400"></span> out</p>
+      </div>
+      <div class="glass p-5">
+        <label for="daily" class="text-sm text-slate-400">Daily budget limit</label>
+        <div class="flex items-center gap-2 mt-2">
+          <span class="text-3xl font-extrabold">RM</span>
+          <input id="daily" type="number" min="1" step="1" value="100" class="field !text-2xl !font-extrabold !py-1">
+        </div>
+        <p id="avg" class="text-xs text-slate-400 mt-2"></p>
+      </div>
+      <div class="glass p-5">
+        <p class="text-sm text-slate-400">Budget progress</p>
+        <p id="status" class="text-xl font-extrabold mt-3">-</p>
+        <div class="h-2 rounded-full bg-white/10 mt-3 overflow-hidden"><div id="bar" class="h-full rounded-full transition-all duration-500" style="width:0"></div></div>
+        <p id="pct" class="text-xs text-slate-400 mt-2"></p>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-4">
+      <div class="glass p-5">
+        <h2 class="font-semibold mb-3">Monthly expense distribution</h2>
+        <div class="relative h-64"><canvas id="pie"></canvas></div>
+      </div>
+      <div class="glass p-5">
+        <h2 class="font-semibold mb-3">Monthly income vs expense</h2>
+        <div class="relative h-64"><canvas id="barChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: form + history -->
+  <aside class="space-y-6 min-w-0">
+    <form id="form" class="glass p-5 space-y-3" novalidate>
+      <h2 class="font-semibold">Add expense or income</h2>
+      <div><label class="text-xs text-slate-400" for="category">Category</label><select id="category" class="field mt-1"></select></div>
+      <div><label class="text-xs text-slate-400" for="amount">Amount (RM)</label><input id="amount" type="number" step="0.01" placeholder="-150 or 850" class="field mt-1"></div>
+      <div><label class="text-xs text-slate-400" for="date">Date</label><input id="date" type="date" class="field mt-1"></div>
+      <div><label class="text-xs text-slate-400" for="note">Note</label><input id="note" type="text" maxlength="255" placeholder="new sport shoe" class="field mt-1"></div>
+      <p id="msg" class="text-sm min-h-[1.25rem]" role="status"></p>
+      <button id="save" class="w-full py-3 rounded-xl font-extrabold text-teal-950 bg-teal-400 hover:bg-teal-300 transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-200">Save Expense</button>
+    </form>
+
+    <div class="glass p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold">History</h2>
+        <div class="flex gap-2">
+          <label class="chip"><input id="useM" type="checkbox" class="sr-only" checked><span id="chipM"></span></label>
+          <label class="chip"><input id="useY" type="checkbox" class="sr-only" checked><span id="chipY"></span></label>
+        </div>
+      </div>
+      <ul id="history" class="max-h-[420px] overflow-y-auto divide-y divide-white/10"></ul>
+    </div>
+  </aside>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const EXPENSE_CATS = ['Food','Transport','Rent','Shopping','Entertainment','Bills','Health'];
+const INCOME_CATS = ['Freelance','Salary','Other Income'];
+const COLORS = ['#2dd4bf','#818cf8','#f472b6','#fbbf24','#38bdf8','#fb7185','#a3e635'];
+const now = new Date();
+const S = { m: now.getMonth() + 1, y: now.getFullYear() };
+let pie, barChart;
+
+const rm = n => 'RM ' + Number(n).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const today = () => new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+
+async function api(action, params = {}, body) {
+  const url = 'api.php?' + new URLSearchParams({ action, ...params });
+  const res = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {});
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+function flash(text, ok) {
+  const el = $('msg');
+  el.textContent = text;
+  el.className = 'text-sm min-h-[1.25rem] ' + (ok ? 'text-emerald-400' : 'text-rose-400');
+  if (ok) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 2500);
+}
+
+// ---------- Summary: stats + charts ----------
+async function loadSummary() {
+  const s = await api('summary', { month: S.m, year: S.y });
+  $('net').textContent = (s.net < 0 ? '-' : '') + rm(Math.abs(s.net));
+  $('net').className = 'text-3xl font-extrabold mt-2 ' + (s.net < 0 ? 'text-rose-400' : 'text-emerald-400');
+  $('inc').textContent = rm(s.income);
+  $('exp').textContent = rm(s.expense);
+
+  const isNow = S.y === now.getFullYear() && S.m === now.getMonth() + 1;
+  const days = isNow ? now.getDate() : new Date(S.y, S.m, 0).getDate();
+  const daily = Math.max(1, parseFloat($('daily').value) || 100);
+  const limit = daily * days;
+  const pct = s.expense / limit * 100;
+  const [label, color] = pct <= 80 ? ['GOOD PROGRESS', '#34d399'] : pct <= 100 ? ['WATCH SPENDING', '#fbbf24'] : ['OVER BUDGET', '#fb7185'];
+  $('status').textContent = label;
+  $('status').style.color = color;
+  $('bar').style.width = Math.min(100, pct) + '%';
+  $('bar').style.background = color;
+  $('pct').textContent = `${rm(s.expense)} of ${rm(limit)} (${days} day${days > 1 ? 's' : ''})`;
+  $('avg').textContent = `Spending ${rm(s.expense / days)} per day`;
+
+  const hasData = s.categories.length > 0;
+  const labels = hasData ? s.categories.map(c => c.category) : ['No expenses yet'];
+  const values = hasData ? s.categories.map(c => c.total) : [1];
+  const colors = hasData ? labels.map((_, i) => COLORS[i % COLORS.length]) : ['rgba(255,255,255,.12)'];
+  if (!pie) {
+    pie = new Chart($('pie'), {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data: values, backgroundColor: colors, borderWidth: 0 }] },
+      options: { maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom' }, tooltip: { callbacks: { label: c => hasDataNow() ? ` ${c.label}: ${rm(c.parsed)}` : '' } } } }
+    });
+  } else {
+    Object.assign(pie.data, { labels });
+    Object.assign(pie.data.datasets[0], { data: values, backgroundColor: colors });
+    pie.update();
+  }
+  pie._has = hasData;
+
+  const short = MONTHS.map(m => m.slice(0, 3));
+  const inc = s.monthly.map(x => x.income), exp = s.monthly.map(x => x.expense);
+  if (!barChart) {
+    barChart = new Chart($('barChart'), {
+      type: 'bar',
+      data: { labels: short, datasets: [
+        { label: 'Income', data: inc, backgroundColor: '#2dd4bf', borderRadius: 4 },
+        { label: 'Expense', data: exp, backgroundColor: '#fb7185', borderRadius: 4 } ] },
+      options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.07)' } }, x: { grid: { display: false } } } }
+    });
+  } else {
+    barChart.data.datasets[0].data = inc;
+    barChart.data.datasets[1].data = exp;
+    barChart.update();
+  }
+}
+const hasDataNow = () => pie && pie._has;
+
+// ---------- History ----------
+async function loadHistory() {
+  const useM = $('useM').checked, useY = $('useY').checked;
+  const { items } = await api('list', { month: useM && useY ? S.m : (useM ? S.m : 0), year: useY ? S.y : 0 });
+  const ul = $('history');
+  ul.innerHTML = '';
+  if (!items.length) {
+    ul.innerHTML = '<li class="py-8 text-center text-sm text-slate-400">No transactions for this filter. Add one using the form.</li>';
+    return;
+  }
+  for (const t of items) {
+    const li = document.createElement('li');
+    li.className = 'py-3 flex items-center gap-3 text-sm';
+    const income = t.amount > 0;
+    li.innerHTML = `
+      <span class="text-slate-400 tabular-nums shrink-0"></span>
+      <span class="px-2 py-0.5 rounded-md text-xs font-semibold shrink-0 bg-white/10"></span>
+      <span class="flex-1 min-w-0 truncate"></span>
+      <span class="font-semibold tabular-nums shrink-0 ${income ? 'text-emerald-400' : 'text-rose-400'}"></span>
+      <button class="text-slate-400 hover:text-rose-400 text-lg leading-none px-1" aria-label="Delete transaction">&times;</button>`;
+    const c = li.children; // textContent only: no HTML injection from user data
+    c[0].textContent = t.tx_date;
+    c[1].textContent = t.category;
+    c[2].textContent = t.note || '-';
+    c[2].title = t.note || '';
+    c[3].textContent = (income ? '+' : '-') + 'RM' + Math.abs(t.amount).toFixed(2);
+    c[4].onclick = () => removeTx(t.id);
+    ul.appendChild(li);
+  }
+}
+
+async function removeTx(id) {
+  if (!confirm('Delete this transaction?')) return;
+  try { await api('delete', {}, { id }); await refresh(); }
+  catch (e) { flash(e.message, false); }
+}
+
+// ---------- Wiring ----------
+const refresh = () => Promise.all([loadSummary(), loadHistory()]).catch(e => flash(e.message, false));
+
+function syncChips() {
+  $('chipM').textContent = MONTHS[S.m - 1].slice(0, 3).toUpperCase();
+  $('chipY').textContent = S.y;
+}
+
+$('selMonth').innerHTML = MONTHS.map((m, i) => `<option value="${i + 1}">${m}</option>`).join('');
+$('selYear').innerHTML = Array.from({ length: 8 }, (_, i) => now.getFullYear() + 1 - i).map(y => `<option>${y}</option>`).join('');
+$('selMonth').value = S.m; $('selYear').value = S.y;
+$('category').innerHTML =
+  `<optgroup label="Expenses">${EXPENSE_CATS.map(c => `<option>${c}</option>`).join('')}</optgroup>` +
+  `<optgroup label="Income">${INCOME_CATS.map(c => `<option>${c}</option>`).join('')}</optgroup>`;
+$('date').value = today();
+try { $('daily').value = localStorage.getItem('dailyBudget') || 100; } catch (e) {}
+syncChips();
+
+$('selMonth').onchange = e => { S.m = +e.target.value; syncChips(); refresh(); };
+$('selYear').onchange = e => { S.y = +e.target.value; syncChips(); refresh(); };
+$('useM').onchange = $('useY').onchange = loadHistory;
+$('daily').oninput = () => { try { localStorage.setItem('dailyBudget', $('daily').value); } catch (e) {} loadSummary(); };
+
+$('form').onsubmit = async e => {
+  e.preventDefault();
+  const amount = parseFloat($('amount').value);
+  if (!amount) return flash('Enter an amount other than 0', false);
+  if (!$('date').value) return flash('Choose a date', false);
+  $('save').disabled = true;
+  try {
+    await api('add', {}, { category: $('category').value, amount, date: $('date').value, note: $('note').value });
+    $('amount').value = ''; $('note').value = '';
+    flash('Saved', true);
+    // Jump the dashboard to the month of the saved entry so the change is visible.
+    const [y, m] = $('date').value.split('-').map(Number);
+    S.y = y; S.m = m;
+    if (![...$('selYear').options].some(o => +o.value === y)) $('selYear').add(new Option(y, y));
+    $('selYear').value = y; $('selMonth').value = m; syncChips();
+    await refresh();
+  } catch (err) { flash(err.message, false); }
+  $('save').disabled = false;
+};
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = "'Manrope', sans-serif";
+refresh();
+</script>
+</body>
+</html>
